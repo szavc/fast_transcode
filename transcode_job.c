@@ -114,37 +114,33 @@ int32_t transcode_process_video(transcode_factory_t* pTranscodeFactory,aup_vpkt_
             if(pOutFF->running)
             {
                 chkp();
-                err = aup_venc_send(pOutFF->pVcodec,pDstPIC);
+                err = aup_venc_frame(pOutFF->pVcodec,pDstPIC,&outAupPkt);
                 if(!err)
                 {
-                    err = aup_venc_recv(pOutFF->pVcodec,&outAupPkt);
-                    if(!err)
-                    {
-                        chkp();
-                        copy_aupvpkt_to_avpacket(&avPkt,&outAupPkt);
-                        avPkt.stream_index = pOutFF->videoIndex;
-                        chkp();
-                        avPkt.duration = av_rescale_q(vframeDuration,AVRational{1, AV_TIME_BASE},vStream->time_base);
-                        avPkt.pts = av_rescale_q((int64_t)pInAupPkt->pts,AVRational{1, AV_TIME_BASE},vStream->time_base);
-                        avPkt.dts = avPkt.pts;
-                        chkp();
-                        info("avPkt.dts = %lld\n",avPkt.pts);
-    //                    avPkt.dts = 0;
-                        avPkt.pos = -1;
-                        avPkt.flags = (NAL_SLICE_IDR == aup_vcodec_h264_nal_type(outAupPkt.p,outAupPkt.len)) ? 1:0;
+                    chkp();
+                    copy_aupvpkt_to_avpacket(&avPkt,&outAupPkt);
+                    avPkt.stream_index = pOutFF->videoIndex;
+                    chkp();
+                    avPkt.duration = av_rescale_q(vframeDuration,AVRational{1, AV_TIME_BASE},vStream->time_base);
+                    avPkt.pts = av_rescale_q((int64_t)pInAupPkt->pts,AVRational{1, AV_TIME_BASE},vStream->time_base);
+                    avPkt.dts = avPkt.pts;
+                    chkp();
+                    info("avPkt.dts = %lld\n",avPkt.pts);
+//                    avPkt.dts = 0;
+                    avPkt.pos = -1;
+                    avPkt.flags = (NAL_SLICE_IDR == aup_vcodec_h264_nal_type(outAupPkt.p,outAupPkt.len)) ? 1:0;
 
-                        if(avPkt.size > 0)
+                    if(avPkt.size > 0)
+                    {
+                        /* mux encoded frame */
+                        err = av_write_frame(pOutFF->pCtx, &avPkt);
+                        if(err)
                         {
-                            /* mux encoded frame */
-                            err = av_write_frame(pOutFF->pCtx, &avPkt);
-                            if(err)
-                            {
-                                av_log(NULL,AV_LOG_ERROR, "Error muxing video packet\n");
-                            }
-                            av_packet_unref(&avPkt);
+                            av_log(NULL,AV_LOG_ERROR, "Error muxing video packet\n");
                         }
-                        aup_venc_outbuf_return(pOutFF->pVcodec, &outAupPkt);
+                        av_packet_unref(&avPkt);
                     }
+                    aup_venc_outbuf_return(pOutFF->pVcodec, &outAupPkt);
                 }
             }
         }
